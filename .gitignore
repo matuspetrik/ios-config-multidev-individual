@@ -2,3 +2,4 @@ venv
 test.log
 logs/*
 config/*
+Lib/__pycache__/*

@@ -9,11 +9,13 @@ import sys
 from queue import Queue
 from getpass import getpass
 from netmiko import ConnectHandler
-from netmiko.ssh_exception import NetMikoTimeoutException
-from netmiko.ssh_exception import NetMikoAuthenticationException
-from paramiko.ssh_exception import NoValidConnectionsError, SSHException
-import paramiko
+# from netmiko.ssh_exception import NetMikoTimeoutException
+# from netmiko.ssh_exception import NetMikoAuthenticationException
+# from paramiko.ssh_exception import NoValidConnectionsError, SSHException
+# import paramiko
 import logging
+import Lib.Configurations as configs
+import Lib.Worker as worker
 
 if os.path.exists(os.getcwd()+"/test.log"):
     os.remove(os.getcwd()+"/test.log")
@@ -173,32 +175,32 @@ SECRET = PASSWORD
 # ]
 
 
-def session_worker(hostname, output_q, router, output_dict, method):
-   # output_dict = {}
-    with open(PATH_INPUT+hostname) as f:
-        lines = f.read().splitlines()
-    device_session = ConnectHandler(**router)
-    time.sleep(2)
-    device_session.enable()
-    output_list = []
-    output_dict[hostname+"_"+method] = ""
-    output = "##############################################\r\n# Device config started at: "+str(datetime.datetime.now())+" #\r\n##############################################\r\n"
-    output += device_session.send_config_set(lines, delay_factor=4)
-    #output += device_session.send_command("write\r\n")  # uncomment if you want the config to be written
-    #output += device_session.send_command("\r\n") 
-    #output += device_session.save_config() 
-#    output = net_connect.send_command_timing(command)
-    #print(output)
-    if "confirm" in output:
-        output += net_connect.send_command_timing("y", strip_prompt=False, strip_command=False) # in case 'y' confirmation is needed
-    output += device_session.save_config()
-    with open(PATH+hostname,'a+') as the_file:
-        the_file.write(output)
-        the_file.write("\r\n")
-    output_dict[hostname+".log"]  = output
-    output_q.put(output_dict)
-    time.sleep(2)
-    device_session.disconnect()
+# def session_worker_cisco_ios(hostname, output_q, router, output_dict, method):
+#    # output_dict = {}
+#     with open(PATH_INPUT+hostname) as f:
+#         lines = f.read().splitlines()
+#     device_session = ConnectHandler(**router)
+#     time.sleep(2)
+#     #device_session.enable()
+#     output_list = []
+#     output_dict[hostname+"_"+method] = ""
+#     output = "##############################################\r\n# Device config started at: "+str(datetime.datetime.now())+" #\r\n##############################################\r\n"
+#     output += device_session.send_config_set(lines, delay_factor=4)
+#     #output += device_session.send_command("write\r\n")  # uncomment if you want the config to be written
+#     #output += device_session.send_command("\r\n") 
+#     #output += device_session.save_config() 
+# #    output = net_connect.send_command_timing(command)
+#     #print(output)
+#     if "confirm" in output:
+#         output += net_connect.send_command_timing("y", strip_prompt=False, strip_command=False) # in case 'y' confirmation is needed
+#     output += device_session.save_config()
+#     with open(PATH+hostname,'a+') as the_file:
+#         the_file.write(output)
+#         the_file.write("\r\n")
+#     output_dict[hostname+".log"]  = output
+#     output_q.put(output_dict)
+#     time.sleep(2)
+#     device_session.disconnect()
 
 
 
@@ -208,19 +210,25 @@ def session(router, output_q, id):
     hostname    = router
     router_ip   = router
     output_dict = {}
-    
+    device_type = configs.identify_config(PATH_INPUT+hostname)
+    print(device_type)
     try:
-        router =    {   'device_type': 'cisco_ios_ssh', 
+        # router =    {   'device_type': 'cisco_ios_ssh', 
+        router =    {   'device_type': device_type, 
                         'ip': router_ip, 
                         'username': USER, 
                         'password': PASSWORD, 
                         'secret': SECRET, 
-                        'verbose': False,
+                        # 'verbose': False,
+                        'verbose': True,
                         'ssh_config_file': '~/.ssh/config',
 #                        'global_delay_factor': 1
                     }
-        #print(router)
-        session_worker(hostname, output_q, router, output_dict, method="ssh")
+        if 'mikrotik' in device_type:
+            print(router)
+            worker.session_worker_mikrotik(hostname, output_q, router, output_dict, method="ssh", PATH_INPUT=PATH_INPUT, PATH=PATH)
+        elif 'cisco_ios' in device_type:
+            worker.session_worker_cisco_ios(hostname, output_q, router, output_dict, method="ssh")
         time.sleep(1)
         string = "SSH: "+router_ip
         print(string)
@@ -235,7 +243,10 @@ def session(router, output_q, id):
                         'secret': SECRET, 
                         'verbose': False
                     }
-            session_worker(hostname, output_q, router, output_dict, method="telnet")
+            if 'mikrotik' in device_type:
+                worker.session_worker_mikrotik(hostname, output_q, router, output_dict, method="telnet")
+            elif 'cisco_ios' in device_type:
+                worker.session_worker_cisco_ios(hostname, output_q, router, output_dict, method="telnet")
             time.sleep(1)
             string = "Telnet: "+ router_ip
             print(string)
