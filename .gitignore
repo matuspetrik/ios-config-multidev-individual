@@ -3,3 +3,4 @@ test.log
 logs/*
 config/*
 Lib/__pycache__/*
+Lib/__pycache__
